@@ -1,0 +1,6 @@
+@MyHeroAcademiaApi_HostAddress = http://localhost:5299
+
+GET {{MyHeroAcademiaApi_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
