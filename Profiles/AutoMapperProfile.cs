@@ -11,14 +11,38 @@ namespace MyHeroAcademiaApi.Profiles
     {
         public AutoMapperProfile()
         {
-            CreateMap<Hero, HeroDTO>().ReverseMap();
-            CreateMap<CreateHeroDTO, Hero>();
-            CreateMap<UpdateHeroDTO, Hero>();
+            // Mapeo para SimpleQuirkDTO
+            CreateMap<Quirk, SimpleQuirkDTO>();
 
-            // Configuraciones similares para otras entidades
-            CreateMap<Quirk, QuirkDTO>().ReverseMap();
-            CreateMap<Villain, VillainDTO>().ReverseMap();
-            CreateMap<Item, ItemDTO>().ReverseMap();
+            // Hero mappings
+            CreateMap<Hero, HeroDTO>()
+                .ForMember(dest => dest.Quirk, opt => opt.MapFrom(src => src.Quirk));
+
+            CreateMap<CreateHeroDTO, Hero>()
+                .ForMember(dest => dest.ImageUrl, opt => opt.Ignore());
+
+            CreateMap<UpdateHeroDTO, Hero>()
+                .ForMember(dest => dest.ImageUrl, opt => opt.Ignore());
+
+            // Quirk mappings
+            CreateMap<Quirk, QuirkDTO>();
+            CreateMap<CreateQuirkDTO, Quirk>();
+            CreateMap<UpdateQuirkDTO, Quirk>();
+
+            // Villain mappings
+            CreateMap<Villain, VillainDTO>()
+                .ForMember(dest => dest.Quirk, opt => opt.MapFrom(src => src.Quirk));
+
+            CreateMap<CreateVillainDTO, Villain>()
+                .ForMember(dest => dest.ImageUrl, opt => opt.Ignore());
+
+            CreateMap<UpdateVillainDTO, Villain>()
+                .ForMember(dest => dest.ImageUrl, opt => opt.Ignore());
+
+            // Item mappings
+            CreateMap<Item, ItemDTO>();
+            CreateMap<CreateItemDTO, Item>();
+            CreateMap<UpdateItemDTO, Item>();
         }
     }
 }

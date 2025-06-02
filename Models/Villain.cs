@@ -2,11 +2,9 @@
 {
     public class Villain : BaseEntity
     {
-        public string Name { get; set; }
-        public string Gang { get; set; }
+        public required string Name { get; set; }
         public Guid QuirkId { get; set; }
-        public Quirk Quirk { get; set; }
-        public string ImageUrl { get; set; }
-
+        public Quirk? Quirk { get; set; }
+        public string? ImageUrl { get; set; }
     }
 }

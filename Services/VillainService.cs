@@ -1,7 +1,9 @@
 ﻿using AutoMapper;
+using Microsoft.EntityFrameworkCore;
 using MyHeroAcademiaApi.Data.Repositories;
 using MyHeroAcademiaApi.DTOs.Villain;
 using MyHeroAcademiaApi.Models;
+using System.ComponentModel.DataAnnotations;
 
 namespace MyHeroAcademiaApi.Services
 {
@@ -9,149 +11,79 @@ namespace MyHeroAcademiaApi.Services
     {
         private readonly IUnitOfWork _unitOfWork;
         private readonly IMapper _mapper;
-        private readonly ImageService _imageService;
-        private readonly ILogger<VillainService> _logger;
 
-        public VillainService(IUnitOfWork unitOfWork, IMapper mapper, ImageService imageService, ILogger<VillainService> logger)
+        public VillainService(IUnitOfWork unitOfWork, IMapper mapper)
         {
             _unitOfWork = unitOfWork;
             _mapper = mapper;
-            _imageService = imageService;
-            _logger = logger;
         }
 
-        public async Task<IEnumerable<VillainDTO>> GetAllAsync()
+        public async Task<IEnumerable<VillainDTO>> GetAllVillainsAsync()
         {
-            try
-            {
-                var villains = await _unitOfWork.VillainRepository.GetAllAsync();
-                return _mapper.Map<IEnumerable<VillainDTO>>(villains);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error retrieving all villains");
-                throw;
-            }
+            var villains = await _unitOfWork.Villains.GetQueryable()
+                .Include(v => v.Quirk)
+                .Where(v => !v.IsDeleted)
+                .ToListAsync();
+
+            return _mapper.Map<IEnumerable<VillainDTO>>(villains);
         }
 
-        public async Task<VillainDTO> GetByIdAsync(Guid id)
+        public async Task<VillainDTO> GetVillainByIdAsync(Guid id)
         {
-            try
-            {
-                var villain = await _unitOfWork.VillainRepository.GetByIdAsync(id);
+            var villain = await _unitOfWork.Villains.GetQueryable()
+                .Include(v => v.Quirk)
+                .FirstOrDefaultAsync(v => v.Id == id && !v.IsDeleted);
 
-                if (villain == null || villain.IsDeleted)
-                    throw new KeyNotFoundException($"Villain with ID {id} not found");
-
-                return _mapper.Map<VillainDTO>(villain);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, $"Error retrieving villain with ID {id}");
-                throw;
-            }
+            if (villain == null) throw new KeyNotFoundException("Villain not found");
+            return _mapper.Map<VillainDTO>(villain);
         }
 
-        public async Task<VillainDTO> CreateAsync(CreateVillainDTO createDto, IFormFile imageFile = null)
+        public async Task<VillainDTO> CreateVillainAsync(CreateVillainDTO createVillainDTO, string imageUrl)
         {
-            try
-            {
-                // Validar existencia de quirk
-                var quirk = await _unitOfWork.QuirkRepository.GetByIdAsync(createDto.QuirkId);
-                if (quirk == null || quirk.IsDeleted)
-                    throw new InvalidOperationException($"Quirk with ID {createDto.QuirkId} does not exist");
+            // Validate quirk exists
+            var quirk = await _unitOfWork.Quirks.GetByIdAsync(createVillainDTO.QuirkId);
+            if (quirk == null)
+                throw new KeyNotFoundException("Quirk not found");
 
-                var villain = _mapper.Map<Villain>(createDto);
-                villain.Id = Guid.NewGuid();
+            var villain = _mapper.Map<Villain>(createVillainDTO);
+            villain.ImageUrl = imageUrl;
 
-                // Guardar imagen si se proporciona
-                if (imageFile != null)
-                {
-                    villain.ImageUrl = await _imageService.SaveImageAsync(imageFile, "Villain");
-                }
+            await _unitOfWork.Villains.AddAsync(villain);
+            await _unitOfWork.CompleteAsync();
 
-                await _unitOfWork.VillainRepository.AddAsync(villain);
-                await _unitOfWork.SaveAsync();
-
-                return _mapper.Map<VillainDTO>(villain);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error creating villain");
-                throw;
-            }
+            return _mapper.Map<VillainDTO>(villain);
         }
 
-        public async Task UpdateAsync(Guid id, VillainDTO updateDto, IFormFile imageFile = null)
+        public async Task UpdateVillainAsync(Guid id, UpdateVillainDTO updateVillainDTO, string? imageUrl)
         {
-            try
+            var villain = await _unitOfWork.Villains.GetByIdAsync(id);
+            if (villain == null) throw new KeyNotFoundException("Villain not found");
+
+            // Update properties
+            if (!string.IsNullOrEmpty(updateVillainDTO.Name))
+                villain.Name = updateVillainDTO.Name;
+
+            if (updateVillainDTO.QuirkId.HasValue)
             {
-                if (id != updateDto.Id)
-                    throw new ArgumentException("ID mismatch");
-
-                var villain = await _unitOfWork.VillainRepository.GetByIdAsync(id);
-                if (villain == null || villain.IsDeleted)
-                    throw new KeyNotFoundException($"Villain with ID {id} not found");
-
-                // Validar existencia de quirk
-                var quirk = await _unitOfWork.QuirkRepository.GetByIdAsync(updateDto.QuirkId);
-                if (quirk == null || quirk.IsDeleted)
-                    throw new InvalidOperationException($"Quirk with ID {updateDto.QuirkId} does not exist");
-
-                _mapper.Map(updateDto, villain);
-
-                // Actualizar imagen si se proporciona
-                if (imageFile != null)
-                {
-                    villain.ImageUrl = await _imageService.SaveImageAsync(imageFile, "Villain");
-                }
-
-                _unitOfWork.VillainRepository.Update(villain);
-                await _unitOfWork.SaveAsync();
+                var quirk = await _unitOfWork.Quirks.GetByIdAsync(updateVillainDTO.QuirkId.Value);
+                if (quirk == null) throw new KeyNotFoundException("Quirk not found");
+                villain.QuirkId = updateVillainDTO.QuirkId.Value;
             }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, $"Error updating villain with ID {id}");
-                throw;
-            }
+
+            if (!string.IsNullOrEmpty(imageUrl))
+                villain.ImageUrl = imageUrl;
+
+            _unitOfWork.Villains.Update(villain);
+            await _unitOfWork.CompleteAsync();
         }
 
-        public async Task UpdateImageAsync(Guid id, IFormFile imageFile)
+        public async Task DeleteVillainAsync(Guid id)
         {
-            try
-            {
-                var villain = await _unitOfWork.VillainRepository.GetByIdAsync(id);
-                if (villain == null || villain.IsDeleted)
-                    throw new KeyNotFoundException($"Villain with ID {id} not found");
+            var villain = await _unitOfWork.Villains.GetByIdAsync(id);
+            if (villain == null) throw new KeyNotFoundException("Villain not found");
 
-                villain.ImageUrl = await _imageService.SaveImageAsync(imageFile, "Villain");
-
-                _unitOfWork.VillainRepository.Update(villain);
-                await _unitOfWork.SaveAsync();
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, $"Error updating image for villain with ID {id}");
-                throw;
-            }
-        }
-
-        public async Task DeleteAsync(Guid id)
-        {
-            try
-            {
-                var villain = await _unitOfWork.VillainRepository.GetByIdAsync(id);
-                if (villain == null || villain.IsDeleted)
-                    throw new KeyNotFoundException($"Villain with ID {id} not found");
-
-                _unitOfWork.VillainRepository.Delete(villain);
-                await _unitOfWork.SaveAsync();
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, $"Error deleting villain with ID {id}");
-                throw;
-            }
+            _unitOfWork.Villains.Delete(villain);
+            await _unitOfWork.CompleteAsync();
         }
     }
 }

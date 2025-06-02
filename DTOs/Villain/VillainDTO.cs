@@ -1,26 +1,21 @@
 ﻿using System.ComponentModel.DataAnnotations;
+using MyHeroAcademiaApi.DTOs.Quirk; // Agregar esta referencia
 
 namespace MyHeroAcademiaApi.DTOs.Villain
 {
-    // DTOs/Villain/VillainDTO.cs
     public class VillainDTO
     {
         public Guid Id { get; set; }
 
-        [Required(ErrorMessage = "Name is required")]
-        [StringLength(100, MinimumLength = 2, ErrorMessage = "Name must be between 2-100 characters")]
-        public string Name { get; set; }
+        [Required, MaxLength(100)]
+        public required string Name { get; set; }
 
-        [Required(ErrorMessage = "Gang is required")]
-        [StringLength(50, ErrorMessage = "Gang cannot exceed 50 characters")]
-        public string Gang { get; set; }
+        [Required]
+        public required SimpleQuirkDTO Quirk { get; set; } // Usar SimpleQuirkDTO
 
-        [Required(ErrorMessage = "Quirk is required")]
-        public Guid QuirkId { get; set; }
-
-        [Url(ErrorMessage = "Invalid URL format")]
-        public string ImageUrl { get; set; }
+        [Url]
+        public string? ImageUrl { get; set; }
     }
-
-    
 }
+
+// Quitamos la clase anidada QuirkInfoDTO
