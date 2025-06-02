@@ -50,6 +50,9 @@ namespace MyHeroAcademiaApi.Controllers
         [HttpPost]
         public async Task<IActionResult> CreateQuirk([FromBody] CreateQuirkDTO createQuirkDTO)
         {
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
+
             try
             {
                 var quirk = await _quirkService.CreateQuirkAsync(createQuirkDTO);
@@ -68,6 +71,9 @@ namespace MyHeroAcademiaApi.Controllers
         [HttpPut("{id}")]
         public async Task<IActionResult> UpdateQuirk(Guid id, [FromBody] UpdateQuirkDTO updateQuirkDTO)
         {
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
+
             try
             {
                 await _quirkService.UpdateQuirkAsync(id, updateQuirkDTO);

@@ -52,6 +52,9 @@ namespace MyHeroAcademiaApi.Controllers
         [HttpPost]
         public async Task<IActionResult> CreateVillain([FromForm] CreateVillainDTO createVillainDTO)
         {
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
+
             if (createVillainDTO.Image == null || createVillainDTO.Image.Length == 0)
                 return BadRequest("Image is required");
 
@@ -79,6 +82,9 @@ namespace MyHeroAcademiaApi.Controllers
         [HttpPut("{id}")]
         public async Task<IActionResult> UpdateVillain(Guid id, [FromForm] UpdateVillainDTO updateVillainDTO)
         {
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
+
             string? imageUrl = null;
             if (updateVillainDTO.Image != null && updateVillainDTO.Image.Length > 0)
             {
