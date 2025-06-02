@@ -52,6 +52,9 @@ namespace MyHeroAcademiaApi.Controllers
         [HttpPost]
         public async Task<IActionResult> CreateHero([FromForm] CreateHeroDTO createHeroDTO)
         {
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
+
             if (createHeroDTO.Image == null || createHeroDTO.Image.Length == 0)
                 return BadRequest("Image is required");
 
@@ -80,6 +83,10 @@ namespace MyHeroAcademiaApi.Controllers
         public async Task<IActionResult> UpdateHero(Guid id, [FromForm] UpdateHeroDTO updateHeroDTO)
         {
             string? imageUrl = null;
+            
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
+
             if (updateHeroDTO.Image != null && updateHeroDTO.Image.Length > 0)
             {
                 imageUrl = await SaveImage(updateHeroDTO.Image);

@@ -50,6 +50,9 @@ namespace MyHeroAcademiaApi.Controllers
         [HttpPost]
         public async Task<IActionResult> CreateItem([FromBody] CreateItemDTO createItemDTO)
         {
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
+
             try
             {
                 var item = await _itemService.CreateItemAsync(createItemDTO);
@@ -68,6 +71,9 @@ namespace MyHeroAcademiaApi.Controllers
         [HttpPut("{id}")]
         public async Task<IActionResult> UpdateItem(Guid id, [FromBody] UpdateItemDTO updateItemDTO)
         {
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
+
             try
             {
                 await _itemService.UpdateItemAsync(id, updateItemDTO);
