@@ -5,23 +5,40 @@ namespace MyHeroAcademiaApi.Data.Repositories
     public class UnitOfWork : IUnitOfWork
     {
         private readonly ApplicationDbContext _context;
+        private bool _disposed = false;
 
         public UnitOfWork(ApplicationDbContext context)
         {
             _context = context;
-            HeroRepository = new Repository<Hero>(_context);
-            QuirkRepository = new Repository<Quirk>(_context);
-            VillainRepository = new Repository<Villain>(_context);
-            ItemRepository = new Repository<Item>(_context);
+            Heroes = new Repository<Hero>(context);
+            Quirks = new Repository<Quirk>(context);
+            Villains = new Repository<Villain>(context);
+            Items = new Repository<Item>(context);
         }
 
-        public IRepository<Hero> HeroRepository { get; }
-        public IRepository<Quirk> QuirkRepository { get; }
-        public IRepository<Villain> VillainRepository { get; }
-        public IRepository<Item> ItemRepository { get; }
+        public IRepository<Hero> Heroes { get; }
+        public IRepository<Quirk> Quirks { get; }
+        public IRepository<Villain> Villains { get; }
+        public IRepository<Item> Items { get; }
 
-        public async Task<bool> SaveAsync() => await _context.SaveChangesAsync() > 0;
+        public async Task CompleteAsync() => await _context.SaveChangesAsync();
 
-        public void Dispose() => _context.Dispose();
+        protected virtual void Dispose(bool disposing)
+        {
+            if (!_disposed)
+            {
+                if (disposing)
+                {
+                    _context.Dispose();
+                }
+                _disposed = true;
+            }
+        }
+
+        public void Dispose()
+        {
+            Dispose(true);
+            GC.SuppressFinalize(this);
+        }
     }
 }

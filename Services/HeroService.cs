@@ -1,7 +1,9 @@
 ﻿using AutoMapper;
+using Microsoft.EntityFrameworkCore;
 using MyHeroAcademiaApi.Data.Repositories;
 using MyHeroAcademiaApi.DTOs.Hero;
 using MyHeroAcademiaApi.Models;
+using System.ComponentModel.DataAnnotations;
 
 namespace MyHeroAcademiaApi.Services
 {
@@ -9,149 +11,101 @@ namespace MyHeroAcademiaApi.Services
     {
         private readonly IUnitOfWork _unitOfWork;
         private readonly IMapper _mapper;
-        private readonly ImageService _imageService;
-        private readonly ILogger<HeroService> _logger;
 
-        public HeroService(IUnitOfWork unitOfWork, IMapper mapper, ImageService imageService, ILogger<HeroService> logger)
+        public HeroService(IUnitOfWork unitOfWork, IMapper mapper)
         {
             _unitOfWork = unitOfWork;
             _mapper = mapper;
-            _imageService = imageService;
-            _logger = logger;
         }
 
-        public async Task<IEnumerable<HeroDTO>> GetAllAsync()
+        public async Task<IEnumerable<HeroDTO>> GetAllHeroesAsync()
         {
-            try
-            {
-                var heroes = await _unitOfWork.HeroRepository.GetAllAsync();
-                return _mapper.Map<IEnumerable<HeroDTO>>(heroes);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error retrieving all heroes");
-                throw;
-            }
+            var heroes = await _unitOfWork.Heroes.GetQueryable()
+                .Include(h => h.Quirk)
+                .Where(h => !h.IsDeleted)
+                .ToListAsync();
+
+            return _mapper.Map<IEnumerable<HeroDTO>>(heroes);
         }
 
-        public async Task<HeroDTO> GetByIdAsync(Guid id)
+        public async Task<HeroDTO> GetHeroByIdAsync(Guid id)
         {
-            try
-            {
-                var hero = await _unitOfWork.HeroRepository.GetByIdAsync(id);
+            var hero = await _unitOfWork.Heroes.GetQueryable()
+                .Include(h => h.Quirk)
+                .FirstOrDefaultAsync(h => h.Id == id && !h.IsDeleted);
 
-                if (hero == null || hero.IsDeleted)
-                    throw new KeyNotFoundException($"Hero with ID {id} not found");
-
-                return _mapper.Map<HeroDTO>(hero);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, $"Error retrieving hero with ID {id}");
-                throw;
-            }
+            if (hero == null) throw new KeyNotFoundException("Hero not found");
+            return _mapper.Map<HeroDTO>(hero);
         }
 
-        public async Task<HeroDTO> CreateAsync(CreateHeroDTO createDto, IFormFile imageFile = null)
+        public async Task<HeroDTO> CreateHeroAsync(CreateHeroDTO createHeroDTO, string imageUrl)
         {
-            try
-            {
-                // Validar existencia de quirk
-                var quirk = await _unitOfWork.QuirkRepository.GetByIdAsync(createDto.QuirkId);
-                if (quirk == null || quirk.IsDeleted)
-                    throw new InvalidOperationException($"Quirk with ID {createDto.QuirkId} does not exist");
+            // Validate rank uniqueness
+            var existingHero = await _unitOfWork.Heroes.GetQueryable()
+                .FirstOrDefaultAsync(h => h.Rank == createHeroDTO.Rank && !h.IsDeleted);
 
-                var hero = _mapper.Map<Hero>(createDto);
-                hero.Id = Guid.NewGuid();
+            if (existingHero != null)
+                throw new ValidationException("Rank must be unique");
 
-                // Guardar imagen si se proporciona
-                if (imageFile != null)
-                {
-                    hero.ImageUrl = await _imageService.SaveImageAsync(imageFile, "Hero");
-                }
+            // Validate quirk exists
+            var quirk = await _unitOfWork.Quirks.GetByIdAsync(createHeroDTO.QuirkId);
+            if (quirk == null)
+                throw new KeyNotFoundException("Quirk not found");
 
-                await _unitOfWork.HeroRepository.AddAsync(hero);
-                await _unitOfWork.SaveAsync();
+            var hero = _mapper.Map<Hero>(createHeroDTO);
+            hero.ImageUrl = imageUrl;
 
-                return _mapper.Map<HeroDTO>(hero);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error creating hero");
-                throw;
-            }
+            await _unitOfWork.Heroes.AddAsync(hero);
+            await _unitOfWork.CompleteAsync();
+
+            return _mapper.Map<HeroDTO>(hero);
         }
 
-        public async Task UpdateAsync(Guid id, UpdateHeroDTO updateDto, IFormFile imageFile = null)
+        public async Task UpdateHeroAsync(Guid id, UpdateHeroDTO updateHeroDTO, string? imageUrl)
         {
-            try
+            var hero = await _unitOfWork.Heroes.GetByIdAsync(id);
+            if (hero == null) throw new KeyNotFoundException("Hero not found");
+
+            // Validate rank if changed
+            if (updateHeroDTO.Rank.HasValue && hero.Rank != updateHeroDTO.Rank.Value)
             {
-                if (id != updateDto.Id)
-                    throw new ArgumentException("ID mismatch");
+                var existingHero = await _unitOfWork.Heroes.GetQueryable()
+                    .FirstOrDefaultAsync(h => h.Rank == updateHeroDTO.Rank.Value && !h.IsDeleted);
 
-                var hero = await _unitOfWork.HeroRepository.GetByIdAsync(id);
-                if (hero == null || hero.IsDeleted)
-                    throw new KeyNotFoundException($"Hero with ID {id} not found");
+                if (existingHero != null)
+                    throw new ValidationException("Rank must be unique");
 
-                // Validar existencia de quirk
-                var quirk = await _unitOfWork.QuirkRepository.GetByIdAsync(updateDto.QuirkId);
-                if (quirk == null || quirk.IsDeleted)
-                    throw new InvalidOperationException($"Quirk with ID {updateDto.QuirkId} does not exist");
-
-                _mapper.Map(updateDto, hero);
-
-                // Actualizar imagen si se proporciona
-                if (imageFile != null)
-                {
-                    hero.ImageUrl = await _imageService.SaveImageAsync(imageFile, "Hero");
-                }
-
-                _unitOfWork.HeroRepository.Update(hero);
-                await _unitOfWork.SaveAsync();
+                hero.Rank = updateHeroDTO.Rank.Value;
             }
-            catch (Exception ex)
+
+            // Update other properties
+            if (!string.IsNullOrEmpty(updateHeroDTO.Name))
+                hero.Name = updateHeroDTO.Name;
+
+            if (updateHeroDTO.QuirkId.HasValue)
             {
-                _logger.LogError(ex, $"Error updating hero with ID {id}");
-                throw;
+                var quirk = await _unitOfWork.Quirks.GetByIdAsync(updateHeroDTO.QuirkId.Value);
+                if (quirk == null) throw new KeyNotFoundException("Quirk not found");
+                hero.QuirkId = updateHeroDTO.QuirkId.Value;
             }
+
+            if (!string.IsNullOrEmpty(updateHeroDTO.Affiliation))
+                hero.Affiliation = updateHeroDTO.Affiliation;
+
+            if (!string.IsNullOrEmpty(imageUrl))
+                hero.ImageUrl = imageUrl;
+
+            _unitOfWork.Heroes.Update(hero);
+            await _unitOfWork.CompleteAsync();
         }
 
-        public async Task UpdateImageAsync(Guid id, IFormFile imageFile)
+        public async Task DeleteHeroAsync(Guid id)
         {
-            try
-            {
-                var hero = await _unitOfWork.HeroRepository.GetByIdAsync(id);
-                if (hero == null || hero.IsDeleted)
-                    throw new KeyNotFoundException($"Hero with ID {id} not found");
+            var hero = await _unitOfWork.Heroes.GetByIdAsync(id);
+            if (hero == null) throw new KeyNotFoundException("Hero not found");
 
-                hero.ImageUrl = await _imageService.SaveImageAsync(imageFile, "Hero");
-
-                _unitOfWork.HeroRepository.Update(hero);
-                await _unitOfWork.SaveAsync();
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, $"Error updating image for hero with ID {id}");
-                throw;
-            }
-        }
-
-        public async Task DeleteAsync(Guid id)
-        {
-            try
-            {
-                var hero = await _unitOfWork.HeroRepository.GetByIdAsync(id);
-                if (hero == null || hero.IsDeleted)
-                    throw new KeyNotFoundException($"Hero with ID {id} not found");
-
-                _unitOfWork.HeroRepository.Delete(hero);
-                await _unitOfWork.SaveAsync();
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, $"Error deleting hero with ID {id}");
-                throw;
-            }
+            _unitOfWork.Heroes.Delete(hero);
+            await _unitOfWork.CompleteAsync();
         }
     }
 }

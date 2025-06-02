@@ -1,29 +1,57 @@
+using Microsoft.EntityFrameworkCore;
+using MyHeroAcademiaApi.Data;
+using Newtonsoft.Json;
+using MyHeroAcademiaApi.Profiles;
+using MyHeroAcademiaApi.Data.Repositories;
 using MyHeroAcademiaApi.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
+// Add services to the container
+builder.Services.AddControllers()
+    .AddNewtonsoftJson(options =>
+        options.SerializerSettings.ReferenceLoopHandling = ReferenceLoopHandling.Ignore);
 
-builder.Services.AddControllers();
-// Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
+// Configure DbContext
+builder.Services.AddDbContext<ApplicationDbContext>(options =>
+    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
+
+// Configure AutoMapper
+builder.Services.AddAutoMapper(typeof(AutoMapperProfile));
+
+// Configure Repositories
+builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
+
+// Configure Services
+builder.Services.AddScoped<IHeroService, HeroService>();
+builder.Services.AddScoped<IQuirkService, QuirkService>();
+builder.Services.AddScoped<IVillainService, VillainService>();
+builder.Services.AddScoped<IItemService, ItemService>();
+
+// Configure Swagger
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
-
-builder.Services.AddScoped<ImageService>();
+builder.Services.AddSwaggerGen(); // <- Esto es fundamental
 
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
-    app.UseSwagger();
-    app.UseSwaggerUI();
+    app.UseSwagger(); // <- Esto genera /swagger/v1/swagger.json
+    app.UseSwaggerUI(); // <- Esto genera la UI en /swagger/index.html
 }
 
+
 app.UseHttpsRedirection();
-
+app.UseStaticFiles(); // For serving uploaded images
 app.UseAuthorization();
-
 app.MapControllers();
+
+// Apply database migrations
+using (var scope = app.Services.CreateScope())
+{
+    var services = scope.ServiceProvider;
+    var context = services.GetRequiredService<ApplicationDbContext>();
+    context.Database.Migrate();
+}
 
 app.Run();

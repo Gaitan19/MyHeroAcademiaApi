@@ -1,7 +1,9 @@
 ﻿using AutoMapper;
+using Microsoft.EntityFrameworkCore;
 using MyHeroAcademiaApi.Data.Repositories;
 using MyHeroAcademiaApi.DTOs.Quirk;
 using MyHeroAcademiaApi.Models;
+using System.ComponentModel.DataAnnotations;
 
 namespace MyHeroAcademiaApi.Services
 {
@@ -9,115 +11,70 @@ namespace MyHeroAcademiaApi.Services
     {
         private readonly IUnitOfWork _unitOfWork;
         private readonly IMapper _mapper;
-        private readonly ILogger<QuirkService> _logger;
 
-        public QuirkService(IUnitOfWork unitOfWork, IMapper mapper, ILogger<QuirkService> logger)
+        public QuirkService(IUnitOfWork unitOfWork, IMapper mapper)
         {
             _unitOfWork = unitOfWork;
             _mapper = mapper;
-            _logger = logger;
         }
 
-        public async Task<IEnumerable<QuirkDTO>> GetAllAsync()
+        public async Task<IEnumerable<QuirkDTO>> GetAllQuirksAsync()
         {
-            try
-            {
-                var quirks = await _unitOfWork.QuirkRepository.GetAllAsync();
-                return _mapper.Map<IEnumerable<QuirkDTO>>(quirks);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error retrieving all quirks");
-                throw;
-            }
+            var quirks = await _unitOfWork.Quirks.GetAllAsync();
+            return _mapper.Map<IEnumerable<QuirkDTO>>(quirks);
         }
 
-        public async Task<QuirkDTO> GetByIdAsync(Guid id)
+        public async Task<QuirkDTO> GetQuirkByIdAsync(Guid id)
         {
-            try
-            {
-                var quirk = await _unitOfWork.QuirkRepository.GetByIdAsync(id);
-
-                if (quirk == null || quirk.IsDeleted)
-                    throw new KeyNotFoundException($"Quirk with ID {id} not found");
-
-                return _mapper.Map<QuirkDTO>(quirk);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, $"Error retrieving quirk with ID {id}");
-                throw;
-            }
+            var quirk = await _unitOfWork.Quirks.GetByIdAsync(id);
+            if (quirk == null) throw new KeyNotFoundException("Quirk not found");
+            return _mapper.Map<QuirkDTO>(quirk);
         }
 
-        public async Task<QuirkDTO> CreateAsync(CreateQuirkDTO createDto)
+        public async Task<QuirkDTO> CreateQuirkAsync(CreateQuirkDTO createQuirkDTO)
         {
-            try
-            {
-                var quirk = _mapper.Map<Quirk>(createDto);
-                quirk.Id = Guid.NewGuid();
-
-                await _unitOfWork.QuirkRepository.AddAsync(quirk);
-                await _unitOfWork.SaveAsync();
-
-                return _mapper.Map<QuirkDTO>(quirk);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error creating quirk");
-                throw;
-            }
+            var quirk = _mapper.Map<Quirk>(createQuirkDTO);
+            await _unitOfWork.Quirks.AddAsync(quirk);
+            await _unitOfWork.CompleteAsync();
+            return _mapper.Map<QuirkDTO>(quirk);
         }
 
-        public async Task UpdateAsync(Guid id, QuirkDTO updateDto)
+        public async Task UpdateQuirkAsync(Guid id, UpdateQuirkDTO updateQuirkDTO)
         {
-            try
-            {
-                if (id != updateDto.Id)
-                    throw new ArgumentException("ID mismatch");
+            var quirk = await _unitOfWork.Quirks.GetByIdAsync(id);
+            if (quirk == null) throw new KeyNotFoundException("Quirk not found");
 
-                var quirk = await _unitOfWork.QuirkRepository.GetByIdAsync(id);
-                if (quirk == null || quirk.IsDeleted)
-                    throw new KeyNotFoundException($"Quirk with ID {id} not found");
+            // Update properties
+            if (!string.IsNullOrEmpty(updateQuirkDTO.Type))
+                quirk.Type = updateQuirkDTO.Type;
 
-                _mapper.Map(updateDto, quirk);
+            if (!string.IsNullOrEmpty(updateQuirkDTO.Effects))
+                quirk.Effects = updateQuirkDTO.Effects;
 
-                _unitOfWork.QuirkRepository.Update(quirk);
-                await _unitOfWork.SaveAsync();
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, $"Error updating quirk with ID {id}");
-                throw;
-            }
+            if (updateQuirkDTO.Weaknesses != null)
+                quirk.Weaknesses = updateQuirkDTO.Weaknesses;
+
+            _unitOfWork.Quirks.Update(quirk);
+            await _unitOfWork.CompleteAsync();
         }
 
-        public async Task DeleteAsync(Guid id)
+        public async Task DeleteQuirkAsync(Guid id)
         {
-            try
-            {
-                var quirk = await _unitOfWork.QuirkRepository.GetByIdAsync(id);
-                if (quirk == null || quirk.IsDeleted)
-                    throw new KeyNotFoundException($"Quirk with ID {id} not found");
+            var quirk = await _unitOfWork.Quirks.GetByIdAsync(id);
+            if (quirk == null) throw new KeyNotFoundException("Quirk not found");
 
-                // Verificar si el quirk está en uso
-                var heroesUsingQuirk = (await _unitOfWork.HeroRepository.GetAllAsync())
-                    .Any(h => h.QuirkId == id && !h.IsDeleted);
+            // Check if any hero or villain is using this quirk
+            var heroUsingQuirk = await _unitOfWork.Heroes.GetQueryable()
+                .AnyAsync(h => h.QuirkId == id && !h.IsDeleted);
 
-                var villainsUsingQuirk = (await _unitOfWork.VillainRepository.GetAllAsync())
-                    .Any(v => v.QuirkId == id && !v.IsDeleted);
+            var villainUsingQuirk = await _unitOfWork.Villains.GetQueryable()
+                .AnyAsync(v => v.QuirkId == id && !v.IsDeleted);
 
-                if (heroesUsingQuirk || villainsUsingQuirk)
-                    throw new InvalidOperationException("Cannot delete quirk in use by heroes or villains");
+            if (heroUsingQuirk || villainUsingQuirk)
+                throw new InvalidOperationException("Cannot delete quirk that is currently assigned to a hero or villain");
 
-                _unitOfWork.QuirkRepository.Delete(quirk);
-                await _unitOfWork.SaveAsync();
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, $"Error deleting quirk with ID {id}");
-                throw;
-            }
+            _unitOfWork.Quirks.Delete(quirk);
+            await _unitOfWork.CompleteAsync();
         }
     }
 }

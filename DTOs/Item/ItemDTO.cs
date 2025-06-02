@@ -6,18 +6,13 @@ namespace MyHeroAcademiaApi.DTOs.Item
     {
         public Guid Id { get; set; }
 
-        [Required(ErrorMessage = "Name is required")]
-        [StringLength(100, ErrorMessage = "Name cannot exceed 100 characters")]
-        public string Name { get; set; }
+        [Required, MaxLength(100)]
+        public required string Name { get; set; }
 
-        [Required(ErrorMessage = "Type is required")]
-        [RegularExpression("SupportGadget|Uniform", ErrorMessage = "Type must be SupportGadget or Uniform")]
-        public string Type { get; set; }
+        [Required]
+        public required string Description { get; set; }
 
-        [Required(ErrorMessage = "Description is required")]
-        public string Description { get; set; }
-
-        public Guid? HeroId { get; set; }
-        public Guid? VillainId { get; set; }
+        [MaxLength(50)]
+        public string? Type { get; set; } // gadget/uniforme
     }
 }
